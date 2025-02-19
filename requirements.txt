@@ -3,10 +3,7 @@ whisper
 requests
 numpy
 pydub
-azure-cognitiveservices-speech
-futures
+sounddevice
 faster_whisper
-langchain
-langchain-community
-huggingface-hub
-transformers
+threading
+queue
