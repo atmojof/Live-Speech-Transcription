@@ -16,19 +16,28 @@ with st.sidebar:
         """
     )
     st.header("Settings")
-    st.markdown("- **Transcription Model**: Faster Whisper (small) with Auto Language Detection")
+    st.markdown("- **Transcription Model**: Faster Whisper (small)")
+    st.header("Transcription Language")
     st.header("Notes")
     st.markdown(
         "Try saving the transcription and then summarizing it using **ChatGPT** with the following prompt: \n\n"
         "Summarize the following text (UPLOAD YOUR TXT FILE)."
     )
 
+# Determine language code based on the user's selection.
+language_options = {
+    "Indonesian": ["id-ID", "id"],
+    "English": ["en-US", "en"]
+}
+language_choice = st.selectbox("Choose Language", list(language_options.keys()))
+language_code = language_options[language_choice][1]
+
 # Initialize session state for the transcription result
 if "transcription_result" not in st.session_state:
     st.session_state.transcription_result = ""
 
 # Transcription function using Faster Whisper
-def transcribe_single_whisper(audio_path, lang=None, model=None):
+def transcribe_single_whisper(audio_path, lang, model=None):
     """
     Transcribes a single audio file using the Faster Whisper small model.
     If lang is None, the model will auto-detect the language.
@@ -57,10 +66,10 @@ if audio_file_obj is not None:
     with open(audio_file_path, "wb") as f:
         f.write(audio_bytes)
 
-    # Transcribe the saved audio using Faster Whisper concurrently
-    with st.spinner("Transcribing audio, please wait..."):
+    # Transcribe the saved audio concurrently
+    with st.spinner("Transcribing... Please wait...", show_time=True):
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(transcribe_single_whisper, audio_file_path)
+            future = executor.submit(transcribe_single_whisper, audio_file_path, language_code)
             st.session_state.transcription_result = future.result()
     st.success("Transcription complete!", icon="✅")
 
