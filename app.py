@@ -1,102 +1,78 @@
 import streamlit as st
-import sounddevice as sd
-import numpy as np
-from scipy.io.wavfile import write
-import io
+import os
 from faster_whisper import WhisperModel
-import queue
-import threading
 
-# Initialize session state
-if 'recording' not in st.session_state:
-    st.session_state.recording = False
-if 'audio_buffer' not in st.session_state:
-    st.session_state.audio_buffer = queue.Queue()
-if 'transcription' not in st.session_state:
-    st.session_state.transcription = ""
+# Title of the app
+st.title("🗣️ Live Recording Transcription")
 
-# Load the Whisper model
-@st.cache_resource
-def load_model():
-    return WhisperModel("small", device="cpu", compute_type="int8")
+# Sidebar: Instructions, settings, and notes
+with st.sidebar:
+    st.header("Instructions")
+    st.markdown(
+        """
+        1. Record audio using the recorder.
+        2. The system will record and transcribe the audio.
+        3. The transcription can be summarized for easier understanding.
+        """
+    )
+    st.header("Settings")
+    st.markdown("- **Transcription Model**: Faster Whisper (small)")
+    st.header("Notes")
+    st.markdown(
+        "Try saving the transcription and then summarizing it using **ChatGPT** with the following prompt: \n\n"
+        "Summarize the following text (UPLOAD YOUR TXT FILE)."
+    )
 
-# Audio callback function
-def audio_callback(indata, frames, time, status):
-    if st.session_state.recording:
-        st.session_state.audio_buffer.put(indata.copy())
+# Initialize session state for the transcription result
+if "transcription_result" not in st.session_state:
+    st.session_state.transcription_result = ""
 
-# Function to process audio and transcribe
-def transcribe_audio(model):
-    while st.session_state.recording or not st.session_state.audio_buffer.empty():
-        try:
-            # Get audio chunks from the buffer
-            audio_chunk = st.session_state.audio_buffer.get(timeout=1)
-            audio_array = np.concatenate(audio_chunk, axis=0)
+# Transcription function using Faster Whisper
+def transcribe_single_whisper(audio_path, lang="en", model=None):
+    """
+    Transcribes a single audio file using the Faster Whisper small model.
+    """
+    if model is None:
+        # Load the small model on CPU with float32 precision
+        model = WhisperModel("small", device="cpu", compute_type="float32")
+    segments, _ = model.transcribe(audio_path, language=lang)
+    transcription = ""
+    for segment in segments:
+        start_time = segment.start
+        text = segment.text
+        transcription += f"[{int(start_time // 60):02}:{int(start_time % 60):02}] {text}\n"
+    return transcription.strip()
 
-            # Convert to WAV bytes
-            wav_io = io.BytesIO()
-            write(wav_io, 16000, (audio_array * 32767).astype(np.int16))  # Scale to int16
-            wav_io.seek(0)
+# Record audio using the built-in widget (requires a recent version of Streamlit)
+audio_file_obj = st.audio_input("Record a voice message")
 
-            # Transcribe the audio chunk
-            segments, _ = model.transcribe(wav_io, beam_size=5)
-            for segment in segments:
-                st.session_state.transcription += segment.text + " "
+if audio_file_obj is not None:
+    # Play the recorded audio in the frontend
+    st.audio(audio_file_obj, format="audio/wav")
 
-        except queue.Empty:
-            continue
+    # Save the recorded audio bytes as a WAV file
+    audio_file_path = "audio.wav"
+    audio_bytes = audio_file_obj.read()
+    with open(audio_file_path, "wb") as f:
+        f.write(audio_bytes)
 
-# Streamlit app
-st.title("Live Speech-to-Text with Faster-Whisper")
+    # Transcribe the saved audio using Faster Whisper
+    with st.spinner("Transcribing audio, please wait..."):
+        st.session_state.transcription_result = transcribe_single_whisper(audio_file_path)
+    st.success("Transcription complete!", icon="✅")
 
-# Load the model
-model = load_model()
+    # If no transcription was detected, update the result accordingly
+    if not st.session_state.transcription_result:
+        st.session_state.transcription_result = "No voice detected! Please try speaking louder."
 
-# Single toggle button
-if st.button("Start Recording" if not st.session_state.recording else "Stop Recording"):
-    if not st.session_state.recording:
-        # Start recording
-        st.session_state.recording = True
-        st.session_state.audio_buffer = queue.Queue()  # Clear previous buffer
-        st.session_state.transcription = ""  # Clear previous transcription
-        st.session_state.stream = sd.InputStream(
-            samplerate=16000,
-            channels=1,
-            dtype='float32',
-            callback=audio_callback
-        )
-        st.session_state.stream.start()
+    # Display the transcription in a text area
+    st.subheader("Transcription")
+    st.text_area("Transcribed Text", value=st.session_state.transcription_result, height=300)
 
-        # Start transcription thread
-        threading.Thread(target=transcribe_audio, args=(model,), daemon=True).start()
-    else:
-        # Stop recording
-        st.session_state.recording = False
-        st.session_state.stream.stop()
-        st.session_state.stream.close()
-        del st.session_state.stream
-
-# Display current recording status
-if st.session_state.recording:
-    st.warning("Recording in progress... Speak now!")
-else:
-    st.info("Not recording. Click the button to start.")
-
-# Display live transcription
-st.subheader("Live Transcription:")
-transcription_placeholder = st.empty()
-while st.session_state.recording:
-    transcription_placeholder.markdown(f"**Transcription:** {st.session_state.transcription}")
-
-# Display final transcription
-st.subheader("Final Transcription:")
-st.write(st.session_state.transcription)
-
-# Instructions
-st.markdown("""
-**Instructions:**
-1. Click the button to start recording.
-2. Speak clearly into your microphone.
-3. Click the button again to stop recording.
-4. The transcription will appear live as you speak.
-""")
+    # Add a download button for the transcription result
+    st.download_button(
+        label="Download Transcription",
+        data=st.session_state.transcription_result,
+        file_name="transcription.txt",
+        mime="text/plain",
+    )
