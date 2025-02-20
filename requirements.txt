@@ -1,9 +1,7 @@
 streamlit
-whisper
 requests
 numpy
 pydub
 sounddevice
 faster_whisper
-threading
 queue
