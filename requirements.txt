@@ -3,5 +3,5 @@ requests
 numpy
 pydub
 sounddevice
-faster_whisper
+faster_whisper==1.1.1
 queue
