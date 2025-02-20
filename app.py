@@ -1,8 +1,8 @@
 import streamlit as st
 import os
 from faster_whisper import WhisperModel
+import concurrent.futures
 
-# Title of the app
 st.title("🗣️ Live Recording Transcription")
 
 # Sidebar: Instructions, settings, and notes
@@ -16,7 +16,7 @@ with st.sidebar:
         """
     )
     st.header("Settings")
-    st.markdown("- **Transcription Model**: Faster Whisper (small)")
+    st.markdown("- **Transcription Model**: Faster Whisper (small) with Auto Language Detection")
     st.header("Notes")
     st.markdown(
         "Try saving the transcription and then summarizing it using **ChatGPT** with the following prompt: \n\n"
@@ -28,9 +28,10 @@ if "transcription_result" not in st.session_state:
     st.session_state.transcription_result = ""
 
 # Transcription function using Faster Whisper
-def transcribe_single_whisper(audio_path, lang="en", model=None):
+def transcribe_single_whisper(audio_path, lang=None, model=None):
     """
     Transcribes a single audio file using the Faster Whisper small model.
+    If lang is None, the model will auto-detect the language.
     """
     if model is None:
         # Load the small model on CPU with float32 precision
@@ -56,9 +57,11 @@ if audio_file_obj is not None:
     with open(audio_file_path, "wb") as f:
         f.write(audio_bytes)
 
-    # Transcribe the saved audio using Faster Whisper
+    # Transcribe the saved audio using Faster Whisper concurrently
     with st.spinner("Transcribing audio, please wait..."):
-        st.session_state.transcription_result = transcribe_single_whisper(audio_file_path)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(transcribe_single_whisper, audio_file_path)
+            st.session_state.transcription_result = future.result()
     st.success("Transcription complete!", icon="✅")
 
     # If no transcription was detected, update the result accordingly
