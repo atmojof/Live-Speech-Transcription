@@ -2,5 +2,5 @@ streamlit
 requests
 numpy
 pydub
-sounddevice
+sounddevice==0.5.1
 faster_whisper==1.1.1
