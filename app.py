@@ -44,7 +44,7 @@ def transcribe_single_whisper(audio_path, lang, model=None):
     """
     if model is None:
         # Load the small model on CPU with float32 precision
-        model = WhisperModel("large", device="cpu", compute_type="float32")
+        model = WhisperModel("medium", device="cpu", compute_type="float32")
     segments, _ = model.transcribe(audio_path, language=lang)
     transcription = ""
     for segment in segments:
